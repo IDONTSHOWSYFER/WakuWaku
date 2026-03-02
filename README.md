@@ -36,5 +36,4 @@
 
 ## Livrables du projet
 - **UML** : diagrammes de cas d’utilisation, paquets, classes, séquences
-- **Base de données** : schéma + migrations
 - **Organisation** : GitHub + Trello (suivi des tâches)
