@@ -1,4 +1,4 @@
-# Waku Waku — Bibliothèque de mangas (Mangathèque)
+# Waku Waku 🍜 — Bibliothèque de mangas (Mangathèque)
 
 **Waku Waku** est une application web de mangathèque : elle permet de parcourir et rechercher des mangas, consulter leurs fiches, et suivre sa collection personnelle avec un statut de détention, des notes et des avis.
 
