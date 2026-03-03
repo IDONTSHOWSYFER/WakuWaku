@@ -78,7 +78,7 @@ Ce document décrit les diagrammes de cas d’utilisation (Use Case) du projet *
 - Détailler (voir fiche)
 
 ### Collection (Abonné)
-- Gérer collection**
+- Gérer collection
 - Ajouter
 - Retirer
 - Voir collection
