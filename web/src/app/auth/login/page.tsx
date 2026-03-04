@@ -5,19 +5,6 @@ import { useRouter } from "next/navigation";
 import { pushToast } from "@/components/toast/toastStore";
 import { signIn } from "@/lib/authStore";
 
-function withTimeout<T>(p: Promise<T>, ms = 12000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("Timeout login (12s).")), ms);
-    p.then((v) => {
-      clearTimeout(t);
-      resolve(v);
-    }).catch((e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -56,28 +43,24 @@ export default function LoginPage() {
             onClick={async () => {
               const e = email.trim();
               if (!e || !password) {
-                pushToast({ titre: "Champs manquants", message: "Email + mot de passe." });
+                pushToast({
+                  titre: "Champs manquants",
+                  message: "Email + mot de passe.",
+                });
                 return;
               }
 
               setLoading(true);
-              console.log("[login] start", e);
-
               try {
-                const res = await withTimeout(signIn(e, password), 12000);
-                console.log("[login] ok", res);
-
+                await signIn(e, password);
                 pushToast({ titre: "Connecté", message: "Bienvenue 👋" });
-
-                // IMPORTANT: on stoppe le loading AVANT navigation
-                setLoading(false);
-                router.replace("/profile");
+                router.push("/profile");
               } catch (err: any) {
-                console.error("[login] error", err);
                 pushToast({
                   titre: "Connexion impossible",
                   message: err?.message ?? "Erreur inconnue",
                 });
+              } finally {
                 setLoading(false);
               }
             }}
