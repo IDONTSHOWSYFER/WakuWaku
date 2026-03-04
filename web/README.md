@@ -6,11 +6,11 @@ Commencez par lancer le serveur de développement :
 
 ```bash
 npm run dev
-# gold
+# or
 yarn dev
-# gold
+# or
 pnpm dev
-# gold
+# or
 bun dev
 ```
 

@@ -2,71 +2,61 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
+import { signIn } from "@/lib/authStore";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
-      <section className="glass card rounded-[1.75rem] p-6">
+      <div className="glass card rounded-[1.75rem] p-6">
         <h1 className="text-2xl font-extrabold">Connexion</h1>
-        <p className="text-sm text-zinc-600 mt-1">Accède à ta collection et tes avis.</p>
+        <p className="text-sm text-zinc-600 mt-1">Accède à ta collection et à tes avis.</p>
 
-        <div className="hr" />
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-extrabold text-zinc-700">Email</label>
-            <input
-              className="input mt-1"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ex: valentin@mail.com"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-extrabold text-zinc-700">Mot de passe</label>
-            <input
-              className="input mt-1"
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              placeholder="••••••••"
-            />
-          </div>
+        <div className="mt-4 space-y-3">
+          <input
+            className="input"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="Mot de passe"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
           <button
             className="btn btn-primary w-full"
             disabled={loading}
-            onClick={() => {
+            onClick={async () => {
+              setLoading(true);
               try {
-                setLoading(true);
-                login(email, pw);
-                pushToast({ titre: "Connecté" });
-                router.push("/");
-                router.refresh();
+                await signIn(email.trim(), password);
+                pushToast({ titre: "Connecté", message: "Bienvenue 👋" });
+                router.push("/profile");
               } catch (e: any) {
-                pushToast({ titre: "Connexion impossible", message: e?.message ?? "Erreur" });
+                pushToast({ titre: "Connexion impossible", message: e.message });
               } finally {
                 setLoading(false);
               }
             }}
           >
-            Se connecter
+            {loading ? "Connexion..." : "Se connecter"}
           </button>
 
-          <div className="text-sm text-zinc-700 flex justify-between">
-            <a className="underline" href="/auth/register">Créer un compte</a>
-            <a className="underline" href="/auth/forgot">Mot de passe oublié</a>
+          <div className="flex items-center justify-between text-sm">
+            <a className="underline text-zinc-700" href="/auth/register">Créer un compte</a>
+            <a className="underline text-zinc-700" href="/auth/forgot">Mot de passe oublié</a>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

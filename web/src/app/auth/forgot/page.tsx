@@ -1,33 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { forgotPassword } from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function ForgotPage() {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
   return (
-    <div className="max-w-xl mx-auto space-y-4">
-      <div className="glass card">
-        <h1 className="text-2xl font-extrabold">Réinitialiser le mot de passe</h1>
+    <div className="max-w-lg mx-auto">
+      <div className="glass card rounded-[1.75rem] p-6">
+        <h1 className="text-2xl font-extrabold">Mot de passe oublié</h1>
         <p className="text-sm text-zinc-600 mt-1">
-          MVP : simulation d’envoi. À brancher sur la base + email plus tard.
+          On t’envoie un lien de réinitialisation.
         </p>
 
-        <div className="mt-4 space-y-2">
-          <input className="input" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="Email" />
+        <div className="mt-4 space-y-3">
+          <input className="input" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+
           <button
             className="btn btn-primary w-full"
-            onClick={() => {
-              forgotPassword(email.trim());
-              pushToast({ titre: "Demande envoyée", message: "Si ce compte existe, tu recevras un email." });
-              window.location.href = "/auth/login";
+            disabled={loading}
+            onClick={async () => {
+              setLoading(true);
+              try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+                  redirectTo: `${location.origin}/auth/reset`,
+                });
+                if (error) throw error;
+                pushToast({ titre: "Email envoyé", message: "Vérifie ta boîte mail." });
+              } catch (e: any) {
+                pushToast({ titre: "Erreur", message: e.message });
+              } finally {
+                setLoading(false);
+              }
             }}
           >
-            Envoyer
+            {loading ? "Envoi..." : "Envoyer le lien"}
           </button>
-          <a className="btn btn-soft w-full" href="/auth/login">Retour</a>
         </div>
       </div>
     </div>
