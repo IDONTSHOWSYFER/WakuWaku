@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { signOut, useAuthUser } from "@/lib/authStore";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuthUser, signOut } from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
 
 type Suggest = {
@@ -25,34 +25,55 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   );
 }
 
+function UserIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M20 21a8 8 0 0 0-16 0"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 13a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function Header() {
-  const [mounted, setMounted] = useState(false);
-  const { user, profile, loading: authLoading } = useAuthUser();
+  const { user, profile, loading } = useAuthUser();
 
   // Search
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loadingS, setLoadingS] = useState(false);
   const [items, setItems] = useState<Suggest[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  // User menu
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (!boxRef.current) return;
-      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  // Suggestions
   useEffect(() => {
     const query = q.trim();
     if (!query) {
       setItems([]);
-      setLoading(false);
+      setLoadingS(false);
       return;
     }
 
@@ -62,7 +83,7 @@ export default function Header() {
         const ac = new AbortController();
         abortRef.current = ac;
 
-        setLoading(true);
+        setLoadingS(true);
         setOpen(true);
 
         const r = await fetch(
@@ -86,7 +107,7 @@ export default function Header() {
         if (e?.name === "AbortError") return;
         setItems([]);
       } finally {
-        setLoading(false);
+        setLoadingS(false);
       }
     }, 180);
 
@@ -94,8 +115,11 @@ export default function Header() {
   }, [q]);
 
   const avatarSrc = profile?.avatar_url || "/branding/logo.png";
-  const displayName =
-    profile?.username || (user?.email ? user.email.split("@")[0] : "Profil");
+  const displayName = useMemo(() => {
+    if (profile?.username) return profile.username;
+    if (user?.email) return user.email.split("@")[0];
+    return "Profil";
+  }, [profile?.username, user?.email]);
 
   return (
     <header className="sticky top-0 z-40 py-4">
@@ -110,7 +134,7 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* Search */}
+        {/* Search (desktop) */}
         <div ref={boxRef} className="relative hidden md:block w-[min(520px,40vw)]">
           <div className="flex items-center gap-2">
             <input
@@ -129,6 +153,7 @@ export default function Header() {
                   setOpen(false);
                 }}
                 aria-label="Effacer"
+                type="button"
               >
                 Effacer
               </button>
@@ -137,10 +162,10 @@ export default function Header() {
 
           {open ? (
             <div className="absolute mt-2 w-full bg-white rounded-[1.5rem] p-2 border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)]">
-              {loading ? (
+              {loadingS ? (
                 <div className="p-3 text-sm text-zinc-600">Recherche…</div>
               ) : items.length === 0 ? (
-                <div className="p-3 text-sm text-zinc-600">Aucun résultat. Essaie un autre titre.</div>
+                <div className="p-3 text-sm text-zinc-600">Aucun résultat.</div>
               ) : (
                 <div className="flex flex-col">
                   {items.map((m) => (
@@ -151,7 +176,9 @@ export default function Header() {
                       onClick={() => setOpen(false)}
                     >
                       <div className="relative h-12 w-9 overflow-hidden rounded-xl border border-white/70 bg-white/80 shrink-0">
-                        {m.cover ? <Image src={m.cover} alt={m.titre} fill sizes="36px" className="object-cover" /> : null}
+                        {m.cover ? (
+                          <Image src={m.cover} alt={m.titre} fill sizes="36px" className="object-cover" />
+                        ) : null}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -180,7 +207,7 @@ export default function Header() {
           ) : null}
         </div>
 
-        {/* Nav + User */}
+        {/* Right */}
         <div className="flex items-center gap-1">
           <nav className="hidden sm:flex items-center">
             <NavLink href="/">Découvrir</NavLink>
@@ -188,38 +215,87 @@ export default function Header() {
             <NavLink href="/collection">Collection</NavLink>
           </nav>
 
-          {!mounted || authLoading ? null : user ? (
-            <div className="ml-2 flex items-center gap-2">
-              <Link
-                href="/profile"
-                className="px-3 py-2 rounded-xl hover:bg-white/60 transition inline-flex items-center gap-2"
-                title="Profil"
-              >
-                <div className="relative h-8 w-8 rounded-xl overflow-hidden border border-white/70 bg-white/80">
-                  <Image src={avatarSrc} alt="Avatar" fill sizes="32px" className="object-cover" />
-                </div>
-                <span className="hidden lg:inline text-sm font-extrabold text-zinc-800">{displayName}</span>
-              </Link>
+          {/* User icon + menu */}
+          <div ref={menuRef} className="relative ml-2">
+            <button
+              type="button"
+              className="btn btn-soft !px-3"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Compte"
+              title="Compte"
+              disabled={loading}
+            >
+              {user ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="relative h-8 w-8 rounded-xl overflow-hidden border border-white/70 bg-white/80">
+                    <Image src={avatarSrc} alt="Avatar" fill sizes="32px" className="object-cover" />
+                  </span>
+                  <span className="hidden lg:inline text-sm font-extrabold text-zinc-800">{displayName}</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-zinc-800">
+                  <UserIcon />
+                  <span className="hidden lg:inline">Compte</span>
+                </span>
+              )}
+            </button>
 
-              <button
-                className="btn btn-soft"
-                onClick={async () => {
-                  try {
-                    await signOut();
-                    pushToast({ titre: "Déconnecté" });
-                  } catch (e: any) {
-                    pushToast({ titre: "Erreur", message: e?.message ?? "Impossible de se déconnecter." });
-                  }
-                }}
-              >
-                Déconnexion
-              </button>
-            </div>
-          ) : (
-            <Link className="ml-2 btn btn-primary" href="/auth/login">
-              Connexion
-            </Link>
-          )}
+            {menuOpen ? (
+              <div className="absolute right-0 mt-2 w-[260px] rounded-2xl border border-white/60 bg-white/90 backdrop-blur p-2 shadow-[0_20px_60px_rgba(0,0,0,0.10)]">
+                {user ? (
+                  <>
+                    <Link
+                      href="/profile"
+                      className="block rounded-xl px-3 py-2 text-sm font-extrabold text-zinc-800 hover:bg-white/70 transition"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Ouvrir le profil
+                    </Link>
+                    <Link
+                      href="/collection"
+                      className="block rounded-xl px-3 py-2 text-sm font-extrabold text-zinc-800 hover:bg-white/70 transition"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Ma collection
+                    </Link>
+                    <div className="hr my-2" />
+                    <button
+                      type="button"
+                      className="w-full btn btn-soft justify-center"
+                      onClick={async () => {
+                        try {
+                          await signOut();
+                          pushToast({ titre: "Déconnecté" });
+                          setMenuOpen(false);
+                        } catch (e: any) {
+                          pushToast({ titre: "Erreur", message: e?.message ?? "Impossible." });
+                        }
+                      }}
+                    >
+                      Déconnexion
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/auth/login"
+                      className="block rounded-xl px-3 py-2 text-sm font-extrabold text-zinc-800 hover:bg-white/70 transition"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Connexion
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      className="block rounded-xl px-3 py-2 text-sm font-extrabold text-zinc-800 hover:bg-white/70 transition"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Créer un compte
+                    </Link>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
