@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabaseClient";
+import { useEffect, useState } from "react";
 
 export type AuthUser = {
   id: string;
@@ -15,26 +16,28 @@ export type Profile = {
   updated_at?: string;
 };
 
+export type AuthState = {
+  user: AuthUser | null;
+  profile: Profile | null;
+  loading: boolean;
+};
+
 /** Inscription (Supabase Auth) */
 export async function signUp(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw new Error(error.message);
 
-  // Optionnel: créer un profile "vide" immédiatement (si user dispo)
-  const u = data.user;
-  if (u) {
-    await ensureProfile(u.id, null, null).catch(() => {});
+  // si user dispo => on s'assure d'une row profile
+  if (data.user) {
+    await ensureProfile(data.user.id, null, null).catch(() => {});
   }
 
   return data;
 }
 
-/** Connexion (Supabase Auth) */
+/** Connexion */
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
   return data;
 }
@@ -45,49 +48,23 @@ export async function signOut() {
   if (error) throw new Error(error.message);
 }
 
-/** Compat: ancien code importait logout() */
+/** Compat */
 export async function logout() {
   return signOut();
 }
 
-/** Récupère l'utilisateur courant via Supabase (async) */
+/** User session (async) */
 export async function getSessionUser(): Promise<AuthUser | null> {
   const { data, error } = await supabase.auth.getUser();
   if (error) return null;
   const u = data.user;
   if (!u) return null;
-  return { id: u.id, email: u.email ?? null };
-}
-
-/**
- * Compat: ancien code utilisait getCurrentUser() synchrone.
- * On retourne null (SSR-safe). Les composants doivent écouter onAuthChange().
- */
-export function getCurrentUser(): AuthUser | null {
-  return null;
-}
-
-/** Écouter les changements d'auth (login/logout) */
-export function onAuthChange(cb: (user: AuthUser | null) => void) {
-  // premier call
-  getSessionUser().then(cb).catch(() => cb(null));
-
-  const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-    cb(await getSessionUser());
-  });
-
-  return () => sub.subscription.unsubscribe();
+  return { id: u.id, email: u.email ?? null }; // ✅ fix TS
 }
 
 /** -------- Profiles (public.profiles) -------- */
 
-/** S'assure qu'un profile existe (upsert) */
-async function ensureProfile(
-  userId: string,
-  username: string | null,
-  avatar_url: string | null
-) {
-  // upsert => crée si absent, met à jour si présent
+async function ensureProfile(userId: string, username: string | null, avatar_url: string | null) {
   const { error } = await supabase.from("profiles").upsert(
     {
       id: userId,
@@ -97,11 +74,9 @@ async function ensureProfile(
     },
     { onConflict: "id" }
   );
-
   if (error) throw new Error(error.message);
 }
 
-/** Lire le profil courant */
 export async function getMyProfile(): Promise<Profile | null> {
   const u = await getSessionUser();
   if (!u) return null;
@@ -112,13 +87,8 @@ export async function getMyProfile(): Promise<Profile | null> {
     .eq("id", u.id)
     .maybeSingle();
 
-  if (error) {
-    // si table vide / row pas trouvée, on la crée
-    await ensureProfile(u.id, null, null).catch(() => {});
-    return null;
-  }
+  if (error) throw new Error(error.message);
 
-  // Si pas de row => on crée
   if (!data) {
     await ensureProfile(u.id, null, null);
     return null;
@@ -127,11 +97,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   return data as Profile;
 }
 
-/**
- * ✅ updateProfile : ce que ProfilePage attend
- * - username / avatar_url => dans public.profiles
- * - email => via supabase.auth.updateUser({ email })
- */
+/** Update profile + email */
 export async function updateProfile(input: {
   username?: string;
   avatar_url?: string;
@@ -142,13 +108,11 @@ export async function updateProfile(input: {
 
   const { username, avatar_url, email } = input;
 
-  // 1) Update email si fourni
   if (email && email.trim()) {
     const { error } = await supabase.auth.updateUser({ email: email.trim() });
     if (error) throw new Error(error.message);
   }
 
-  // 2) Update profiles si username/avatar fournis
   if (typeof username !== "undefined" || typeof avatar_url !== "undefined") {
     await ensureProfile(
       u.id,
@@ -160,16 +124,57 @@ export async function updateProfile(input: {
   return true;
 }
 
-/**
- * ✅ changePassword : ce que ProfilePage attend (si tu l'utilises)
- * nécessite que l'utilisateur soit connecté
- */
+/** Change password (requires logged user) */
 export async function changePassword(newPassword: string) {
   const pwd = (newPassword || "").trim();
-  if (pwd.length < 8) {
-    throw new Error("Mot de passe trop court (min 8 caractères).");
-  }
+  if (pwd.length < 8) throw new Error("Mot de passe trop court (min 8 caractères).");
   const { error } = await supabase.auth.updateUser({ password: pwd });
   if (error) throw new Error(error.message);
   return true;
+}
+
+/** Hook global : remplace getCurrentUser() partout */
+export function useAuthUser(): AuthState {
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    profile: null,
+    loading: true,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const u = await getSessionUser();
+      if (cancelled) return;
+      if (!u) {
+        setState({ user: null, profile: null, loading: false });
+        return;
+      }
+      const p = await getMyProfile().catch(() => null);
+      if (cancelled) return;
+      setState({ user: u, profile: p, loading: false });
+    }
+
+    load();
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
+      const u = await getSessionUser();
+      if (cancelled) return;
+      if (!u) {
+        setState({ user: null, profile: null, loading: false });
+        return;
+      }
+      const p = await getMyProfile().catch(() => null);
+      if (cancelled) return;
+      setState({ user: u, profile: p, loading: false });
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  return state;
 }

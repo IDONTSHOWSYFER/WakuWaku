@@ -1,4 +1,3 @@
-// web/src/lib/supabaseClient.ts
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -9,6 +8,6 @@ export const supabase = createClient(url, anon, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: "waku_waku_auth",
+    // ⚠️ PAS de storage custom ici
   },
 });

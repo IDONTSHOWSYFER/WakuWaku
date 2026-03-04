@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { onAuthChange, signOut, getMyProfile, type AuthUser } from "@/lib/authStore";
+import { signOut, useAuthUser } from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
 
 type Suggest = {
@@ -12,11 +12,6 @@ type Suggest = {
   cover: string | null;
   annee?: number | null;
   genres?: string[];
-};
-
-type ProfileLite = {
-  username?: string | null;
-  avatar_url?: string | null;
 };
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -32,10 +27,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
-
-  // Supabase auth + profile
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<ProfileLite | null>(null);
+  const { user, profile, loading: authLoading } = useAuthUser();
 
   // Search
   const [q, setQ] = useState("");
@@ -45,30 +37,8 @@ export default function Header() {
   const abortRef = useRef<AbortController | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
+  useEffect(() => setMounted(true), []);
 
-    return onAuthChange(async (u) => {
-      setUser(u);
-
-      if (!u) {
-        setProfile(null);
-        return;
-      }
-
-      const p = await getMyProfile().catch(() => null);
-      setProfile(
-        p
-          ? {
-              username: (p as any).username ?? null,
-              avatar_url: (p as any).avatar_url ?? null,
-            }
-          : null
-      );
-    });
-  }, []);
-
-  // Close dropdown on outside click
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!boxRef.current) return;
@@ -78,7 +48,6 @@ export default function Header() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  // Suggestions
   useEffect(() => {
     const query = q.trim();
     if (!query) {
@@ -96,9 +65,10 @@ export default function Header() {
         setLoading(true);
         setOpen(true);
 
-        const r = await fetch(`/api/manga/search?q=${encodeURIComponent(query)}&sort=TRENDING_DESC`, {
-          signal: ac.signal,
-        });
+        const r = await fetch(
+          `/api/manga/search?q=${encodeURIComponent(query)}&sort=TRENDING_DESC`,
+          { signal: ac.signal }
+        );
         const d = await r.json();
 
         const next = (d.items as any[])
@@ -124,7 +94,8 @@ export default function Header() {
   }, [q]);
 
   const avatarSrc = profile?.avatar_url || "/branding/logo.png";
-  const displayName = profile?.username || (user?.email ? user.email.split("@")[0] : "Profil");
+  const displayName =
+    profile?.username || (user?.email ? user.email.split("@")[0] : "Profil");
 
   return (
     <header className="sticky top-0 z-40 py-4">
@@ -217,7 +188,7 @@ export default function Header() {
             <NavLink href="/collection">Collection</NavLink>
           </nav>
 
-          {!mounted ? null : user ? (
+          {!mounted || authLoading ? null : user ? (
             <div className="ml-2 flex items-center gap-2">
               <Link
                 href="/profile"
@@ -235,8 +206,6 @@ export default function Header() {
                 onClick={async () => {
                   try {
                     await signOut();
-                    setUser(null);
-                    setProfile(null);
                     pushToast({ titre: "Déconnecté" });
                   } catch (e: any) {
                     pushToast({ titre: "Erreur", message: e?.message ?? "Impossible de se déconnecter." });

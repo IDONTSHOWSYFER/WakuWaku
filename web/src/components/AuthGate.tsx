@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/authStore";
+import { useAuthUser } from "@/lib/authStore";
 
 export default function AuthGate({
   children,
@@ -14,7 +14,7 @@ export default function AuthGate({
   loginHref?: string;
   registerHref?: string;
 }) {
-  const user = getCurrentUser();
+  const { user } = useAuthUser();
 
   if (user) return <>{children ?? null}</>;
 
