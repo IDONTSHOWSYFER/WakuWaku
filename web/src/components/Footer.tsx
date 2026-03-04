@@ -60,13 +60,7 @@ export default function Footer() {
             </ul>
           </div>
         </div>
-
         <div className="hr" />
-
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between text-xs text-zinc-500">
-          <span>Conçu pour une expérience simple, moderne et responsive.</span>
-          <span>Interface & UX : Waku Waku</span>
-        </div>
       </div>
     </footer>
   );

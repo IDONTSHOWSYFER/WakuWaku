@@ -141,7 +141,7 @@ export default function Header() {
 
           {/* Dropdown */}
           {open ? (
-            <div className="absolute mt-2 w-full glass card rounded-[1.5rem] p-2">
+            <div className="absolute mt-2 w-full bg-white rounded-[1.5rem] p-2">
               {loading ? (
                 <div className="p-3 text-sm text-zinc-600">Recherche…</div>
               ) : items.length === 0 ? (
