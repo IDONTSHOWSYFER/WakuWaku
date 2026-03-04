@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import StatusPill from "@/components/StatusPill";
 import EmptyState from "@/components/ui/EmptyState";
 import AuthGate from "@/components/AuthGate";
-
 import {
   getAvis,
   getStatut,
@@ -17,7 +16,7 @@ import {
 } from "@/lib/storage";
 import type { StatutLecture } from "@/lib/types";
 import { pushToast } from "@/components/toast/toastStore";
-import { getCurrentUser } from "@/lib/authStore";
+import { useAuthUser } from "@/lib/authStore";
 
 type Detail = {
   id: number;
@@ -45,19 +44,12 @@ export default function MangaDetailsPage() {
   const router = useRouter();
   const id = Number(params.id);
 
-  const [user, setUser] = useState(() => getCurrentUser());
+  const { user, loading: authLoading } = useAuthUser();
+
   const [data, setData] = useState<Detail | null>(null);
   const [statut, setStatutState] = useState<StatutLecture | null>(null);
-
   const [note, setNote] = useState(0);
   const [commentaire, setCommentaire] = useState("");
-
-  // Re-sync user quand tu reviens sur l'onglet
-  useEffect(() => {
-    const onFocus = () => setUser(getCurrentUser());
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,14 +58,12 @@ export default function MangaDetailsPage() {
       try {
         const r = await fetch(`/api/manga/${id}`);
         const d = await r.json();
-
         if (cancelled) return;
 
         if (!r.ok || d?.error) {
           setData(null);
           return;
         }
-
         setData(d);
       } catch {
         if (!cancelled) setData(null);
@@ -95,7 +85,7 @@ export default function MangaDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, user]);
+  }, [id, user?.id]);
 
   const meta = useMemo(() => {
     if (!data) return "";
@@ -172,7 +162,7 @@ export default function MangaDetailsPage() {
             <div className="hr" />
 
             {/* Actions collection (uniquement connecté) */}
-            {user ? (
+            {authLoading ? null : user ? (
               <div className="grid gap-2 sm:grid-cols-3 items-stretch">
                 <select
                   className="input"
@@ -251,43 +241,44 @@ export default function MangaDetailsPage() {
           ) : null}
         </div>
 
-<div className="flex items-center justify-between gap-3">
-  <span className="text-sm font-extrabold text-zinc-700">Note</span>
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-extrabold text-zinc-700">Note</span>
 
-  <div className="flex items-center gap-3">
-    <div className={`flex gap-1 ${!user ? "opacity-60" : ""}`}>
-      {Array.from({ length: 5 }).map((_, i) => {
-        const n = i + 1;
-        const active = n <= note;
+            <div className="flex items-center gap-3">
+              <div className={`flex gap-1 ${!user ? "opacity-60" : ""}`}>
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const n = i + 1;
+                  const active = n <= note;
 
-        return (
-          <button
-            key={n}
-            type="button"
-            disabled={!user}
-            onClick={() => setNote(n)}
-            aria-label={`${n} étoile`}
-            title={!user ? "Connecte-toi pour noter" : `${n}/5`}
-            className={[
-              "h-9 w-9 rounded-xl border transition grid place-items-center text-lg",
-              active
-                ? "bg-zinc-900 text-white border-zinc-900"
-                : "bg-white/70 border-white/70 hover:bg-white/90 text-zinc-900",
-              !user ? "cursor-not-allowed" : "",
-            ].join(" ")}
-          >
-            ★
-          </button>
-        );
-      })}
-    </div>
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={!user}
+                      onClick={() => setNote(n)}
+                      aria-label={`${n} étoile`}
+                      title={!user ? "Connecte-toi pour noter" : `${n}/5`}
+                      className={[
+                        "h-9 w-9 rounded-xl border transition grid place-items-center text-lg",
+                        active
+                          ? "bg-zinc-900 text-white border-zinc-900"
+                          : "bg-white/70 border-white/70 hover:bg-white/90 text-zinc-900",
+                        !user ? "cursor-not-allowed" : "",
+                      ].join(" ")}
+                    >
+                      ★
+                    </button>
+                  );
+                })}
+              </div>
 
-    <span className="text-sm font-extrabold text-zinc-700 tabular-nums">
-      {note}/5
-    </span>
-  </div>
+              <span className="text-sm font-extrabold text-zinc-700 tabular-nums">
+                {note}/5
+              </span>
+            </div>
+          </div>
 
-          {/* Commentaire */}
           <textarea
             className={`input min-h-[120px] ${!user ? "opacity-70" : ""}`}
             disabled={!user}

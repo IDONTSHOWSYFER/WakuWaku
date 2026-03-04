@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import SectionTitle from "@/components/ui/SectionTitle";
 import MangaCard, { MangaLite } from "@/components/MangaCard";
 import { getStatut } from "@/lib/storage";
-import { getCurrentUser } from "@/lib/authStore";
+import { useAuthUser } from "@/lib/authStore";
 
 type SortKey =
   | "TRENDING_DESC"
@@ -46,6 +46,9 @@ const RELEASES: { value: string; label: string }[] = [
 ];
 
 export default function SearchPage() {
+  const { user } = useAuthUser();
+  const isAuthed = !!user;
+
   const [q, setQ] = useState("");
   const [genre, setGenre] = useState("");
   const [sort, setSort] = useState<SortKey>("TRENDING_DESC");
@@ -54,15 +57,6 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<MangaLite[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  // ✅ état auth STABLE (évite que les deps changent en boucle)
-  const [isAuthed, setIsAuthed] = useState(false);
-  useEffect(() => {
-    setIsAuthed(!!getCurrentUser());
-    const onFocus = () => setIsAuthed(!!getCurrentUser());
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
 
   const qs = useMemo(() => {
     const p = new URLSearchParams();
@@ -73,7 +67,6 @@ export default function SearchPage() {
     return p.toString();
   }, [q, genre, sort, release]);
 
-  // ✅ évite les requêtes en rafale (debounce + abort)
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
