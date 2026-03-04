@@ -14,10 +14,12 @@ export function pushToast(t: Omit<Toast, "id">) {
   }, 2600);
 }
 
-export function subscribe(listener: Listener) {
-  listeners.add(listener);
-  listener(toasts);
-  return () => listeners.delete(listener);
+export function subscribe(cb: (items: Toast[]) => void) {
+  listeners.add(cb);
+  cb(toasts); // push initial
+  return () => {
+    listeners.delete(cb); // ✅ retourne void, pas boolean
+  };
 }
 
 function emit() {

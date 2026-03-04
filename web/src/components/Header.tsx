@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { getCurrentUser, logout } from "@/lib/authStore";
+import { onAuthChange, signOut, getMyProfile, type AuthUser } from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
 
 type Suggest = {
@@ -12,6 +12,11 @@ type Suggest = {
   cover: string | null;
   annee?: number | null;
   genres?: string[];
+};
+
+type ProfileLite = {
+  username?: string | null;
+  avatar_url?: string | null;
 };
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -27,7 +32,10 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 export default function Header() {
   const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+
+  // Supabase auth + profile
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<ProfileLite | null>(null);
 
   // Search
   const [q, setQ] = useState("");
@@ -39,14 +47,28 @@ export default function Header() {
 
   useEffect(() => {
     setMounted(true);
-    setUser(getCurrentUser());
 
-    const onFocus = () => setUser(getCurrentUser());
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return onAuthChange(async (u) => {
+      setUser(u);
+
+      if (!u) {
+        setProfile(null);
+        return;
+      }
+
+      const p = await getMyProfile().catch(() => null);
+      setProfile(
+        p
+          ? {
+              username: (p as any).username ?? null,
+              avatar_url: (p as any).avatar_url ?? null,
+            }
+          : null
+      );
+    });
   }, []);
 
-  // Fermer dropdown au click extérieur
+  // Close dropdown on outside click
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (!boxRef.current) return;
@@ -101,20 +123,23 @@ export default function Header() {
     return () => window.clearTimeout(t);
   }, [q]);
 
+  const avatarSrc = profile?.avatar_url || "/branding/logo.png";
+  const displayName = profile?.username || (user?.email ? user.email.split("@")[0] : "Profil");
+
   return (
     <header className="sticky top-0 z-40 py-4">
       <div className="glass card flex items-center justify-between gap-3 px-4 py-3">
-        {/* Left: Brand */}
+        {/* Brand */}
         <Link href="/" className="flex items-center gap-3">
           <div className="relative h-16 w-16 overflow-hidden">
-            <Image src="/branding/logo.png" alt="Waku Waku" fill sizes="36px" className="object-cover" />
+            <Image src="/branding/logo.png" alt="Waku Waku" fill sizes="64px" className="object-cover" />
           </div>
           <div className="min-w-0">
             <div className="font-extrabold tracking-tight leading-tight">Waku Waku</div>
           </div>
         </Link>
 
-        {/* Middle: Search */}
+        {/* Search */}
         <div ref={boxRef} className="relative hidden md:block w-[min(520px,40vw)]">
           <div className="flex items-center gap-2">
             <input
@@ -139,15 +164,12 @@ export default function Header() {
             ) : null}
           </div>
 
-          {/* Dropdown */}
           {open ? (
-            <div className="absolute mt-2 w-full bg-white rounded-[1.5rem] p-2">
+            <div className="absolute mt-2 w-full bg-white rounded-[1.5rem] p-2 border border-white/60 shadow-[0_20px_60px_rgba(0,0,0,0.08)]">
               {loading ? (
                 <div className="p-3 text-sm text-zinc-600">Recherche…</div>
               ) : items.length === 0 ? (
-                <div className="p-3 text-sm text-zinc-600">
-                  Aucun résultat. Essaie un autre titre.
-                </div>
+                <div className="p-3 text-sm text-zinc-600">Aucun résultat. Essaie un autre titre.</div>
               ) : (
                 <div className="flex flex-col">
                   {items.map((m) => (
@@ -158,9 +180,7 @@ export default function Header() {
                       onClick={() => setOpen(false)}
                     >
                       <div className="relative h-12 w-9 overflow-hidden rounded-xl border border-white/70 bg-white/80 shrink-0">
-                        {m.cover ? (
-                          <Image src={m.cover} alt={m.titre} fill sizes="36px" className="object-cover" />
-                        ) : null}
+                        {m.cover ? <Image src={m.cover} alt={m.titre} fill sizes="36px" className="object-cover" /> : null}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -189,7 +209,7 @@ export default function Header() {
           ) : null}
         </div>
 
-        {/* Right: Nav + User */}
+        {/* Nav + User */}
         <div className="flex items-center gap-1">
           <nav className="hidden sm:flex items-center">
             <NavLink href="/">Découvrir</NavLink>
@@ -205,25 +225,22 @@ export default function Header() {
                 title="Profil"
               >
                 <div className="relative h-8 w-8 rounded-xl overflow-hidden border border-white/70 bg-white/80">
-                  <Image
-                    src={user.avatarUrl || "/branding/logo.png"}
-                    alt="Avatar"
-                    fill
-                    sizes="32px"
-                    className="object-cover"
-                  />
+                  <Image src={avatarSrc} alt="Avatar" fill sizes="32px" className="object-cover" />
                 </div>
-                <span className="hidden lg:inline text-sm font-extrabold text-zinc-800">
-                  {user.username || "Profil"}
-                </span>
+                <span className="hidden lg:inline text-sm font-extrabold text-zinc-800">{displayName}</span>
               </Link>
 
               <button
                 className="btn btn-soft"
-                onClick={() => {
-                  logout();
-                  setUser(null);
-                  pushToast({ titre: "Déconnecté" });
+                onClick={async () => {
+                  try {
+                    await signOut();
+                    setUser(null);
+                    setProfile(null);
+                    pushToast({ titre: "Déconnecté" });
+                  } catch (e: any) {
+                    pushToast({ titre: "Erreur", message: e?.message ?? "Impossible de se déconnecter." });
+                  }
                 }}
               >
                 Déconnexion
@@ -237,7 +254,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile search shortcut */}
+      {/* Mobile shortcut */}
       <div className="md:hidden mt-2">
         <div className="glass card px-4 py-3">
           <Link className="btn btn-soft w-full justify-center" href="/search">

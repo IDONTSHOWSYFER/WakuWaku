@@ -3,12 +3,22 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { changePassword, getCurrentUser, updateProfile } from "@/lib/authStore";
+import {
+  changePassword,
+  getMyProfile,
+  getSessionUser,
+  signIn,
+  updateProfile,
+} from "@/lib/authStore";
 import { pushToast } from "@/components/toast/toastStore";
 
 export default function ProfilePage() {
   const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null);
+
+  const [user, setUser] = useState<{ id: string; email: string | null } | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
 
   const [avatarUrl, setAvatarUrl] = useState("");
   const [username, setUsername] = useState("");
@@ -16,25 +26,46 @@ export default function ProfilePage() {
 
   const [oldPw, setOldPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const u = await getSessionUser();
+      setUser(u);
+
+      if (!u) {
+        setAvatarUrl("");
+        setUsername("");
+        setEmail("");
+        return;
+      }
+
+      setEmail(u.email ?? "");
+
+      const p = await getMyProfile();
+      setAvatarUrl(p?.avatar_url ?? "");
+      setUsername(p?.username ?? "");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
-    const u = getCurrentUser();
-    setUser(u);
+    refresh();
 
-    const onFocus = () => setUser(getCurrentUser());
+    const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    setAvatarUrl(user.avatarUrl ?? "");
-    setUsername(user.username ?? "");
-    setEmail(user.email ?? "");
-  }, [user]);
-
   if (!mounted) return null;
+
+  if (loading) {
+    return <div className="glass card rounded-[1.75rem] p-6 skeleton h-[320px]" />;
+  }
 
   if (!user) {
     return (
@@ -60,7 +91,9 @@ export default function ProfilePage() {
     <div className="space-y-4">
       <section className="glass card rounded-[1.75rem] p-6">
         <h1 className="text-2xl font-extrabold">Profil</h1>
-        <p className="text-sm text-zinc-600 mt-1">Gère tes informations et ton avatar.</p>
+        <p className="text-sm text-zinc-600 mt-1">
+          Gère tes informations et ton avatar.
+        </p>
 
         <div className="hr" />
 
@@ -78,7 +111,9 @@ export default function ProfilePage() {
             </div>
 
             <div className="mt-3 space-y-2">
-              <label className="text-xs font-extrabold text-zinc-700">Photo (URL)</label>
+              <label className="text-xs font-extrabold text-zinc-700">
+                Photo (URL)
+              </label>
               <input
                 className="input"
                 value={avatarUrl}
@@ -98,61 +133,83 @@ export default function ProfilePage() {
                   if (!file) return;
 
                   const reader = new FileReader();
-                  reader.onload = () => {
+                  reader.onload = async () => {
                     const dataUrl = String(reader.result || "");
                     setAvatarUrl(dataUrl);
-                    try {
-                      const updated = updateProfile({ avatarUrl: dataUrl });
-                      setUser(updated);
-                      pushToast({ titre: "Photo mise à jour" });
-                    } catch (err: any) {
-                      pushToast({
-                        titre: "Erreur",
-                        message: err?.message ?? "Impossible.",
-                      });
-                    }
+                    pushToast({
+                      titre: "Aperçu",
+                      message: "N’oublie pas d’enregistrer 🙂",
+                    });
                   };
                   reader.readAsDataURL(file);
                 }}
               />
+              <p className="text-xs text-zinc-500">
+                (Pour un vrai upload “pro”, on utilisera Supabase Storage ensuite.)
+              </p>
             </div>
           </div>
 
           {/* Infos */}
           <div className="flex-1 space-y-3">
             <div>
-              <label className="text-xs font-extrabold text-zinc-700">Username</label>
-              <input className="input mt-1" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <label className="text-xs font-extrabold text-zinc-700">
+                Username
+              </label>
+              <input
+                className="input mt-1"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
             </div>
 
             <div>
-              <label className="text-xs font-extrabold text-zinc-700">Email</label>
-              <input className="input mt-1" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <label className="text-xs font-extrabold text-zinc-700">
+                Email
+              </label>
+              <input
+                className="input mt-1"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Supabase peut demander une confirmation email selon ta config.
+              </p>
             </div>
 
             <button
               className="btn btn-primary"
-              onClick={() => {
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
                 try {
-                  const updated = updateProfile({ username, email, avatarUrl });
-                  setUser(updated);
+                  await updateProfile({
+                    username,
+                    avatar_url: avatarUrl,
+                    email,
+                  });
                   pushToast({ titre: "Profil mis à jour" });
+                  await refresh();
                 } catch (e: any) {
                   pushToast({
                     titre: "Erreur",
                     message: e?.message ?? "Impossible de mettre à jour.",
                   });
+                } finally {
+                  setSaving(false);
                 }
               }}
             >
-              Enregistrer
+              {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
 
             <div className="hr" />
 
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-extrabold text-zinc-700">Ancien mot de passe</label>
+                <label className="text-xs font-extrabold text-zinc-700">
+                  Ancien mot de passe
+                </label>
                 <input
                   className="input mt-1"
                   type="password"
@@ -161,7 +218,9 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-extrabold text-zinc-700">Nouveau mot de passe</label>
+                <label className="text-xs font-extrabold text-zinc-700">
+                  Nouveau mot de passe
+                </label>
                 <input
                   className="input mt-1"
                   type="password"
@@ -172,14 +231,24 @@ export default function ProfilePage() {
             </div>
 
             <p className="text-xs text-zinc-600">
-              Mot de passe fort : 8 caractères min, 1 majuscule, 1 minuscule, 1 chiffre.
+              Mot de passe fort : 8 caractères min, 1 majuscule, 1 minuscule, 1
+              chiffre.
             </p>
 
             <button
               className="btn btn-soft"
-              onClick={() => {
+              disabled={changingPw}
+              onClick={async () => {
+                setChangingPw(true);
                 try {
-                  changePassword(oldPw, newPw);
+                  // On re-auth avec ancien mdp (utile pour éviter changement si vieux mdp faux)
+                  if (!user.email) throw new Error("Email introuvable.");
+                  if (!oldPw.trim()) throw new Error("Ancien mot de passe requis.");
+                  if (!newPw.trim()) throw new Error("Nouveau mot de passe requis.");
+
+                  await signIn(user.email, oldPw); // re-auth
+                  await changePassword(newPw); // change
+
                   setOldPw("");
                   setNewPw("");
                   pushToast({ titre: "Mot de passe changé" });
@@ -188,10 +257,12 @@ export default function ProfilePage() {
                     titre: "Erreur",
                     message: e?.message ?? "Impossible de changer le mot de passe.",
                   });
+                } finally {
+                  setChangingPw(false);
                 }
               }}
             >
-              Changer le mot de passe
+              {changingPw ? "Changement..." : "Changer le mot de passe"}
             </button>
           </div>
         </div>
