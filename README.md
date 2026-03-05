@@ -2,7 +2,7 @@
 
 **Waku Waku** est une application web de mangathèque : elle permet de parcourir et rechercher des mangas, consulter leurs fiches, et suivre sa collection personnelle (statut de détention/lecture, notes et avis).
 
-# Accéder à Waku Waku 👉 https://waku-waku-seven.vercel.app/
+## Accéder à Waku Waku 👉 https://waku-waku-seven.vercel.app/
 
 ## Stack technique
 - **Next.js** (TypeScript)
